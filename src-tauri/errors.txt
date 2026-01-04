@@ -1,0 +1,4 @@
+    Updating crates.io index
+error: no matching package named `tauri-plugin-tray-icon` found
+location searched: crates.io index
+required by package `wisprflow-clone v0.1.0 (C:\Users\Harsh\Desktop\wisprflow-clone\wisprflow-clone\src-tauri)`
