@@ -8,6 +8,7 @@ use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
 use std::sync::Mutex;
 
 struct EnigoState(Mutex<Enigo>);
+struct ShortcutState2(Mutex<Option<String>>);
 
 #[tauri::command]
 fn type_text(text: String, state: tauri::State<'_, EnigoState>) {
@@ -16,8 +17,57 @@ fn type_text(text: String, state: tauri::State<'_, EnigoState>) {
 }
 
 #[tauri::command]
+fn register_shortcut(app: tauri::AppHandle, shortcut_str: String, state: tauri::State<'_, ShortcutState2>) -> Result<String, String> {
+    // Unregister old shortcut if exists
+    if let Ok(mut current) = state.0.lock() {
+        if let Some(old_shortcut_str) = current.as_ref() {
+            if let Ok(old_shortcut) = old_shortcut_str.parse::<Shortcut>() {
+                let _ = app.global_shortcut().unregister(old_shortcut);
+            }
+        }
+        *current = Some(shortcut_str.clone());
+    }
+
+    // Parse and register new shortcut
+    let shortcut: Shortcut = shortcut_str.parse().map_err(|e| format!("Failed to parse shortcut: {}", e))?;
+    
+    app.global_shortcut().on_shortcut(shortcut.clone(), move |app, registered_shortcut, event| {
+        if registered_shortcut == &shortcut {
+            let event_name = match event.state() {
+                ShortcutState::Pressed => "shortcut-down",
+                ShortcutState::Released => "shortcut-up",
+            };
+
+            // Always try to emit to widget first
+            if let Some(widget) = app.get_webview_window("widget") {
+                let _ = widget.emit(event_name, ());
+            } else if let Some(main) = app.get_webview_window("main") {
+                let _ = main.emit(event_name, ());
+            }
+        }
+    })
+    .map_err(|e| format!("Failed to register shortcut: {}", e))?;
+
+    Ok(shortcut_str)
+}
+
+#[tauri::command]
 fn open_widget(app: tauri::AppHandle) {
     if let Some(window) = app.get_webview_window("widget") {
+        // Position widget at bottom center of screen
+        if let Ok(monitor) = window.current_monitor() {
+            if let Some(monitor) = monitor {
+                let screen_size = monitor.size();
+                let widget_width = 200;
+                let widget_height = 40;
+                let margin_bottom = 25; // Shifted down slightly but still visible
+                
+                let x = (screen_size.width as i32 - widget_width) / 2;
+                let y = screen_size.height as i32 - widget_height - margin_bottom;
+                
+                let _ = window.set_position(tauri::Position::Physical(tauri::PhysicalPosition { x, y }));
+            }
+        }
         let _ = window.show();
         let _ = window.set_focus();
     }
@@ -33,9 +83,11 @@ fn open_main_window(app: tauri::AppHandle) {
 pub fn run() {
     tauri::Builder::default()
         .manage(EnigoState(Mutex::new(Enigo::new())))
+        .manage(ShortcutState2(Mutex::new(None)))
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_clipboard_manager::init())
+        .plugin(tauri_plugin_store::Builder::new().build())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .setup(|app| {
             let quit_i = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
@@ -69,32 +121,33 @@ pub fn run() {
                 })
                 .build(app)?;
 
-            // Register global shortcut: Ctrl+Shift+F9 (Highly unique)
-            let shortcut: Shortcut = "Ctrl+Shift+F9".parse().expect("failed to parse shortcut");
-            
-            // on_shortcut handles registration and handler attachment in one call.
-            // We wrap it in match to avoid crashing if the shortcut is already taken by another app.
-            match app.global_shortcut().on_shortcut(shortcut.clone(), move |app, registered_shortcut, event| {
-                if event.state() == ShortcutState::Pressed && registered_shortcut == &shortcut {
-                    println!("Shortcut triggered!");
-                    if let Some(widget) = app.get_webview_window("widget") {
-                        if widget.is_visible().unwrap_or(false) {
-                            let _ = widget.emit("shortcut-triggered", ());
-                        } else if let Some(main) = app.get_webview_window("main") {
-                            let _ = main.emit("shortcut-triggered", ());
-                        }
-                    } else if let Some(main) = app.get_webview_window("main") {
-                        let _ = main.emit("shortcut-triggered", ());
+            // Position and show widget at startup
+            if let Some(widget) = app.get_webview_window("widget") {
+                // Explicitly disable shadows on Windows to remove the "blurred box" effect
+                #[cfg(target_os = "windows")]
+                {
+                    let _ = widget.set_shadow(false);
+                }
+
+                if let Ok(monitor) = widget.current_monitor() {
+                    if let Some(monitor) = monitor {
+                        let screen_size = monitor.size();
+                        let widget_width = 200;
+                        let widget_height = 40;
+                        let margin_bottom = 15;
+                        
+                        let x = (screen_size.width as i32 - widget_width) / 2;
+                        let y = screen_size.height as i32 - widget_height - margin_bottom;
+                        
+                        let _ = widget.set_position(tauri::Position::Physical(tauri::PhysicalPosition { x, y }));
                     }
                 }
-            }) {
-                Ok(_) => println!("Successfully registered shortcut: Ctrl+Shift+F9"),
-                Err(e) => eprintln!("Failed to register shortcut: {}. The app will continue without global shortcut functionality.", e),
+                let _ = widget.show();
             }
 
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![type_text, open_widget, open_main_window])
+        .invoke_handler(tauri::generate_handler![type_text, open_widget, open_main_window, register_shortcut])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
         .run(|app_handle, event| match event {
