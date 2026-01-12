@@ -2,5 +2,5 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 fn main() {
-    wisprflow_clone_lib::run()
+    voice_flow_lib::run()
 }

@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "wisprflow-clone",
-  "version": "0.1.0",
-  "identifier": "com.harsh.wisprflow-clone",
+  "productName": "voice-flow",
+  "version": "1.0.0",
+  "identifier": "com.harsh.voice-flow",
   "build": {
     "beforeDevCommand": "bun run dev",
     "devUrl": "http://localhost:1420",
@@ -17,22 +17,23 @@
     "windows": [
       {
         "label": "main",
-        "title": "wisprflow-clone",
+        "title": "VoiceFlow",
         "width": 800,
         "height": 600
       },
       {
         "label": "widget",
-        "title": "Wispr Widget",
-        "width": 300,
-        "height": 100,
+        "title": "VoiceFlow Widget",
+        "width": 100,
+        "height": 40,
         "decorations": false,
         "alwaysOnTop": true,
         "transparent": true,
         "resizable": false,
         "visible": false,
         "skipTaskbar": true,
-        "dragDropEnabled": true
+        "dragDropEnabled": false,
+        "center": false
       }
     ],
     "security": {

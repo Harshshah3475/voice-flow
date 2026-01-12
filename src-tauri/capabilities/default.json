@@ -9,6 +9,7 @@
     "opener:default",
     "global-shortcut:default",
     "clipboard-manager:default",
-    "shell:default"
+    "shell:default",
+    "store:default"
   ]
 }
